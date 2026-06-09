@@ -1,4 +1,4 @@
-import type { Property, Agent, Note, Appointment, VisitRecord } from '@/types';
+import type { Property, Agent, Note, Appointment, VisitRecord, OpenSlot } from '@/types';
 
 export const DISTRICTS = ['浦东新区', '黄浦区', '静安区', '徐汇区', '长宁区', '普陀区', '虹口区', '杨浦区'];
 
@@ -433,6 +433,36 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
     userPhone: '138****1234',
   },
 ];
+
+const generateDefaultSlots = (): OpenSlot[] => {
+  const today = new Date();
+  const slots: OpenSlot[] = [];
+  const timeSlots = ['09:00-10:00', '10:00-11:00', '11:00-12:00', '14:00-15:00', '15:00-16:00', '16:00-17:00', '17:00-18:00'];
+  const properties = [MOCK_PROPERTIES[0], MOCK_PROPERTIES[1], MOCK_PROPERTIES[3]];
+  let id = 1;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    properties.forEach((p, pi) => {
+      const numSlots = pi === 2 ? 2 : 4;
+      for (let j = 0; j < numSlots; j++) {
+        slots.push({
+          id: `os${id++}`,
+          propertyId: p.id,
+          propertyTitle: p.title,
+          date: dateStr,
+          timeSlot: timeSlots[(i + j + pi) % timeSlots.length],
+          isActive: !(i === 0 && j === 0 && pi === 0),
+          maxCapacity: 3,
+        });
+      }
+    });
+  }
+  return slots;
+};
+
+export const MOCK_OPEN_SLOTS: OpenSlot[] = generateDefaultSlots();
 
 export const MOCK_VISIT_RECORDS: VisitRecord[] = [
   {

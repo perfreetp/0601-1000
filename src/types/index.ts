@@ -108,6 +108,16 @@ export interface QuoteItem {
   interestRate: number;
 }
 
+export interface OpenSlot {
+  id: string;
+  propertyId: string;
+  propertyTitle: string;
+  date: string;
+  timeSlot: string;
+  isActive: boolean;
+  maxCapacity: number;
+}
+
 export interface Filters {
   districts: string[];
   layouts: string[];

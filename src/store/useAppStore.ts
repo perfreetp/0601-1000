@@ -8,8 +8,9 @@ import type {
   Appointment,
   QuoteItem,
   LightingMode,
+  OpenSlot,
 } from '@/types';
-import { MOCK_PROPERTIES, MOCK_NOTES, MOCK_APPOINTMENTS, MOCK_VISIT_RECORDS } from '@/data/mock';
+import { MOCK_PROPERTIES, MOCK_NOTES, MOCK_APPOINTMENTS, MOCK_VISIT_RECORDS, MOCK_OPEN_SLOTS } from '@/data/mock';
 import type { VisitRecord } from '@/types';
 
 interface AppState {
@@ -22,6 +23,7 @@ interface AppState {
   appointments: Appointment[];
   visitRecords: VisitRecord[];
   quotes: QuoteItem[];
+  openSlots: OpenSlot[];
   currentProperty: Property | null;
   currentRoomId: string;
   showFurniture: boolean;
@@ -61,6 +63,11 @@ interface AppState {
   togglePropertySale: (propertyId: string) => void;
   addVisitRecord: (record: Omit<VisitRecord, 'id'>) => void;
 
+  addOpenSlot: (slot: Omit<OpenSlot, 'id'>) => void;
+  toggleSlotActive: (slotId: string) => void;
+  deleteOpenSlot: (slotId: string) => void;
+  getAvailableSlotsForProperty: (propertyId: string) => { date: string; timeSlots: string[] }[];
+
   getFilteredProperties: () => Property[];
   getPropertyById: (id: string) => Property | undefined;
   getCompareProperties: () => Property[];
@@ -86,6 +93,7 @@ export const useAppStore = create<AppState>()(
       appointments: MOCK_APPOINTMENTS,
       visitRecords: MOCK_VISIT_RECORDS,
       quotes: [],
+      openSlots: MOCK_OPEN_SLOTS,
       currentProperty: null,
       currentRoomId: 'r1',
       showFurniture: true,
@@ -210,6 +218,54 @@ export const useAppStore = create<AppState>()(
           ],
         })),
 
+      addOpenSlot: (slot) =>
+        set((state) => ({
+          openSlots: [
+            { ...slot, id: `os${Date.now()}` },
+            ...state.openSlots,
+          ],
+        })),
+
+      toggleSlotActive: (slotId) =>
+        set((state) => ({
+          openSlots: state.openSlots.map((s) =>
+            s.id === slotId ? { ...s, isActive: !s.isActive } : s
+          ),
+        })),
+
+      deleteOpenSlot: (slotId) =>
+        set((state) => ({
+          openSlots: state.openSlots.filter((s) => s.id !== slotId),
+        })),
+
+      getAvailableSlotsForProperty: (propertyId) => {
+        const state = get();
+        const propertySlots = state.openSlots.filter(
+          (s) => s.propertyId === propertyId && s.isActive
+        );
+        const appointmentsForProperty = state.appointments.filter(
+          (a) => a.propertyId === propertyId && a.status !== 'cancelled'
+        );
+        const grouped: Record<string, string[]> = {};
+        propertySlots.forEach((slot) => {
+          const booked = appointmentsForProperty.filter((a) => {
+            const ad = new Date(a.time);
+            const slotTime = slot.timeSlot.split('-')[0];
+            return (
+              ad.toISOString().split('T')[0] === slot.date &&
+              `${String(ad.getHours()).padStart(2, '0')}:00` === slotTime
+            );
+          }).length;
+          if (booked < slot.maxCapacity) {
+            if (!grouped[slot.date]) grouped[slot.date] = [];
+            grouped[slot.date].push(slot.timeSlot);
+          }
+        });
+        return Object.entries(grouped)
+          .map(([date, timeSlots]) => ({ date, timeSlots }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+      },
+
       getFilteredProperties: () => {
         const state = get();
         let result = [...state.properties];
@@ -230,11 +286,18 @@ export const useAppStore = create<AppState>()(
 
         if (state.filters.layouts.length > 0) {
           result = result.filter((p) => {
-            const layoutKey = `${p.bedrooms}室${p.livingrooms}厅`;
-            if (state.filters.layouts.includes('5室及以上')) {
-              return p.bedrooms >= 5;
-            }
-            return state.filters.layouts.some((l) => l.startsWith(`${p.bedrooms}室`));
+            return state.filters.layouts.some((layout) => {
+              if (layout === '5室及以上') {
+                return p.bedrooms >= 5;
+              }
+              const match = layout.match(/^(\d+)室(\d+)厅$/);
+              if (match) {
+                const bedrooms = parseInt(match[1], 10);
+                const livingrooms = parseInt(match[2], 10);
+                return p.bedrooms === bedrooms && p.livingrooms === livingrooms;
+              }
+              return false;
+            });
           });
         }
 
@@ -280,6 +343,7 @@ export const useAppStore = create<AppState>()(
         notes: state.notes,
         appointments: state.appointments,
         quotes: state.quotes,
+        openSlots: state.openSlots,
       }),
     }
   )

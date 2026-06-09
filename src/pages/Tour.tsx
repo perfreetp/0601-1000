@@ -8,8 +8,6 @@ import Navbar from '@/components/Navbar';
 import { useAppStore } from '@/store/useAppStore';
 import { MOCK_AGENTS } from '@/data/mock';
 import type { Agent } from '@/types';
-
-const TIME_SLOTS = ['09:00-10:00', '10:00-11:00', '11:00-12:00', '14:00-15:00', '15:00-16:00', '16:00-17:00', '17:00-18:00'];
 const STATUS_MAP: Record<Agent['status'], { label: string; color: string }> = {
   online: { label: '在线', color: 'bg-aurora-400' },
   busy: { label: '忙碌', color: 'bg-amber-500' },
@@ -23,7 +21,7 @@ const HIGHLIGHTS = [
 export default function Tour() {
   const { id = 'p1' } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getPropertyById, addAppointment } = useAppStore();
+  const { getPropertyById, addAppointment, getAvailableSlotsForProperty } = useAppStore();
   const property = getPropertyById(id);
 
   const [selectedAgent, setSelectedAgent] = useState<Agent>(MOCK_AGENTS[0]);
@@ -38,16 +36,16 @@ export default function Tour() {
   const [apptPhone, setApptPhone] = useState('');
   const [pointer] = useState({ x: 55, y: 40 });
 
-  const dates = useMemo(() => {
-    const arr: string[] = [];
-    const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      arr.push(d.toISOString().split('T')[0]);
-    }
-    return arr;
-  }, []);
+  const availableSlots = useMemo(() => {
+    if (!property) return [];
+    return getAvailableSlotsForProperty(property.id);
+  }, [property, getAvailableSlotsForProperty]);
+
+  const availableTimeSlots = useMemo(() => {
+    if (!apptDate) return [];
+    const daySlots = availableSlots.find((s) => s.date === apptDate);
+    return daySlots ? daySlots.timeSlots : [];
+  }, [apptDate, availableSlots]);
 
   useEffect(() => {
     if (!inCall) { setDuration(0); return; }
@@ -212,29 +210,39 @@ export default function Tour() {
                   <h3 className="font-semibold text-metal-100 flex items-center gap-2"><Calendar className="w-5 h-5 text-aurora-400" />预约看房</h3>
                   <div>
                     <label className="text-sm text-metal-300 mb-2 block flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-aurora-400" />选择日期</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {dates.map((date) => {
-                        const d = new Date(date); const day = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
-                        return (
-                          <button key={date} onClick={() => setApptDate(date)}
-                            className={`p-2 rounded-lg text-xs transition-all ${apptDate === date ? 'bg-aurora-500 text-space-900 font-bold' : 'bg-space-800/50 text-metal-300 hover:bg-space-700'}`}>
-                            <div>{d.getMonth() + 1}/{d.getDate()}</div>
-                            <div className="text-[10px] opacity-70">周{day}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {availableSlots.length === 0 ? (
+                      <div className="text-sm text-coral-400 py-3">该房源暂无可预约时段，请稍后再试</div>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        {availableSlots.map(({ date }) => {
+                          const d = new Date(date); const day = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+                          return (
+                            <button key={date} onClick={() => { setApptDate(date); setApptTime(''); }}
+                              className={`p-2 rounded-lg text-xs transition-all ${apptDate === date ? 'bg-aurora-500 text-space-900 font-bold' : 'bg-space-800/50 text-metal-300 hover:bg-space-700'}`}>
+                              <div>{d.getMonth() + 1}/{d.getDate()}</div>
+                              <div className="text-[10px] opacity-70">周{day}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="text-sm text-metal-300 mb-2 block flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-aurora-400" />选择时间</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {TIME_SLOTS.map((slot) => (
-                        <button key={slot} onClick={() => setApptTime(slot)}
-                          className={`py-1.5 rounded-lg text-xs transition-all ${apptTime === slot ? 'bg-aurora-500 text-space-900 font-bold' : 'bg-space-800/50 text-metal-300 hover:bg-space-700'}`}>
-                          {slot}
-                        </button>
-                      ))}
-                    </div>
+                    {!apptDate ? (
+                      <div className="text-sm text-metal-500 py-3">请先选择日期</div>
+                    ) : availableTimeSlots.length === 0 ? (
+                      <div className="text-sm text-coral-400 py-3">该日期已约满，请选择其他日期</div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2">
+                        {availableTimeSlots.map((slot) => (
+                          <button key={slot} onClick={() => setApptTime(slot)}
+                            className={`py-1.5 rounded-lg text-xs transition-all ${apptTime === slot ? 'bg-aurora-500 text-space-900 font-bold' : 'bg-space-800/50 text-metal-300 hover:bg-space-700'}`}>
+                            {slot}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="text-sm text-metal-300 mb-2 block flex items-center gap-1"><User className="w-3.5 h-3.5 text-aurora-400" />您的姓名</label>
