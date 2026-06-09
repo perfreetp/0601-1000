@@ -19,6 +19,8 @@ import {
   X,
   Heart,
   Scale,
+  Camera,
+  NotebookPen,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { useAppStore } from '@/store/useAppStore';
@@ -319,13 +321,16 @@ export default function Roam() {
     isFavorite,
     addToCompare,
     compareList,
+    addNote,
   } = useAppStore();
 
   const [showRoomList, setShowRoomList] = useState(false);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [infoModal, setInfoModal] = useState<string | null>(null);
+  const [captureFlash, setCaptureFlash] = useState(false);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const plcRef = useRef<PointerLockControlsImpl | null>(null);
+  const canvasGlRef = useRef<HTMLCanvasElement | null>(null);
 
   const property = id ? getPropertyById(id) : undefined;
   const favorite = property ? isFavorite(property.id) : false;
@@ -403,6 +408,28 @@ export default function Roam() {
     addMeasurePoint({ x: x * 3, y: 0.05, z: y * 3 });
   };
 
+  const handleCapture = () => {
+    if (!canvasGlRef.current || !property) return;
+    try {
+      setCaptureFlash(true);
+      setTimeout(() => setCaptureFlash(false), 200);
+      const dataUrl = canvasGlRef.current.toDataURL('image/png');
+      const currentRoom = property.rooms.find((r) => r.id === currentRoomId);
+      const lightingLabel = lightingMode === 'day' ? '白天' : lightingMode === 'dusk' ? '黄昏' : '夜晚';
+      addNote({
+        propertyId: property.id,
+        propertyTitle: property.title,
+        content: `[自动截图] ${currentRoom?.name || '客厅'} · ${lightingLabel}采光 · ${showFurniture ? '含家具' : '无家具'}`,
+        tags: ['截图', currentRoom?.name || '客厅', lightingLabel],
+        screenshot: dataUrl,
+      });
+      navigate('/notes');
+    } catch (err) {
+      console.error('截图失败:', err);
+      alert('截图失败，请重试');
+    }
+  };
+
   return (
     <div className="h-screen w-screen bg-space-950 overflow-hidden relative">
       <div className="absolute top-0 left-0 right-0 z-30">
@@ -410,7 +437,14 @@ export default function Roam() {
       </div>
 
       <div ref={canvasWrapRef} className="absolute inset-0" onClick={handleCanvasClick}>
-        <Canvas shadows camera={{ fov: 75, near: 0.1, far: 1000 }}>
+        <Canvas
+          shadows
+          camera={{ fov: 75, near: 0.1, far: 1000 }}
+          onCreated={({ gl }) => {
+            canvasGlRef.current = gl.domElement;
+          }}
+          gl={{ preserveDrawingBuffer: true }}
+        >
           <DreiPointerLockControls
             ref={(ref) => {
               if (ref) {
@@ -433,41 +467,47 @@ export default function Roam() {
         </Canvas>
       </div>
 
+      {captureFlash && (
+        <div className="absolute inset-0 bg-white/80 pointer-events-none z-[60] animate-pulse" />
+      )}
+
       {!pointerLocked && (
-        <div className="absolute inset-0 flex items-center justify-center bg-space-950/80 z-40 backdrop-blur-sm">
-          <div className="glass-card rounded-2xl p-8 text-center max-w-md border-aurora-500/30">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-aurora-400/20 to-aurora-500/10 flex items-center justify-center border border-aurora-500/30 animate-pulse-slow">
-              <Eye className="w-10 h-10 text-aurora-400" />
-            </div>
-            <h2 className="text-2xl font-display font-bold text-gradient mb-3">进入 VR 漫游模式</h2>
-            <p className="text-metal-300 mb-6 leading-relaxed">
-              点击下方按钮锁定鼠标，使用 <span className="text-aurora-400 font-semibold">WASD</span> 键行走，<span className="text-aurora-400 font-semibold">鼠标</span> 控制视角<br />
-              按 <span className="text-aurora-400 font-semibold">ESC</span> 可随时退出漫游
-            </p>
-            <button
-              onClick={handleStartRoam}
-              className="btn-primary px-10 py-3 text-lg font-semibold animate-glow"
-            >
-              开始漫游
-            </button>
-            <div className="mt-6 pt-4 border-t border-metal-500/20">
-              <div className="grid grid-cols-3 gap-3 text-xs text-metal-400">
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-8 h-8 rounded-lg bg-space-800 flex items-center justify-center font-mono text-aurora-400">WASD</div>
-                  <span>移动</span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-8 h-8 rounded-lg bg-space-800 flex items-center justify-center font-mono text-aurora-400">🖱</div>
-                  <span>视角</span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-8 h-8 rounded-lg bg-space-800 flex items-center justify-center font-mono text-aurora-400">ESC</div>
-                  <span>退出</span>
+        <>
+          <div className="absolute top-20 left-0 right-0 bottom-40 flex items-center justify-center bg-space-950/70 backdrop-blur-sm z-20">
+            <div className="glass-card rounded-2xl p-8 text-center max-w-md border-aurora-500/30 z-30">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-aurora-400/20 to-aurora-500/10 flex items-center justify-center border border-aurora-500/30 animate-pulse-slow">
+                <Eye className="w-10 h-10 text-aurora-400" />
+              </div>
+              <h2 className="text-2xl font-display font-bold text-gradient mb-3">进入 VR 漫游模式</h2>
+              <p className="text-metal-300 mb-6 leading-relaxed">
+                点击下方按钮锁定鼠标，使用 <span className="text-aurora-400 font-semibold">WASD</span> 键行走，<span className="text-aurora-400 font-semibold">鼠标</span> 控制视角<br />
+                按 <span className="text-aurora-400 font-semibold">ESC</span> 可随时退出漫游
+              </p>
+              <button
+                onClick={handleStartRoam}
+                className="btn-primary px-10 py-3 text-lg font-semibold animate-glow"
+              >
+                开始漫游
+              </button>
+              <div className="mt-6 pt-4 border-t border-metal-500/20">
+                <div className="grid grid-cols-3 gap-3 text-xs text-metal-400">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="w-8 h-8 rounded-lg bg-space-800 flex items-center justify-center font-mono text-aurora-400">WASD</div>
+                    <span>移动</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="w-8 h-8 rounded-lg bg-space-800 flex items-center justify-center font-mono text-aurora-400">🖱</div>
+                    <span>视角</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="w-8 h-8 rounded-lg bg-space-800 flex items-center justify-center font-mono text-aurora-400">ESC</div>
+                    <span>退出</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {pointerLocked && (
@@ -629,6 +669,25 @@ export default function Roam() {
               <ZoomOut className="w-5 h-5" />
               <span className="text-[10px]">缩小</span>
             </button>
+          </div>
+
+          <div className="flex items-center gap-1 pr-3 border-r border-metal-500/30">
+            <button
+              onClick={handleCapture}
+              className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-metal-400 hover:text-aurora-400 transition-all"
+              title="拍照并记录笔记"
+            >
+              <Camera className="w-5 h-5" />
+              <span className="text-[10px]">拍照</span>
+            </button>
+            <Link
+              to="/notes"
+              className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-metal-400 hover:text-aurora-400 transition-all"
+              title="查看看房笔记"
+            >
+              <NotebookPen className="w-5 h-5" />
+              <span className="text-[10px]">笔记</span>
+            </Link>
           </div>
 
           <div className="w-px h-10 bg-metal-500/30 mx-2" />

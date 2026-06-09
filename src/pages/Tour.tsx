@@ -21,7 +21,12 @@ const HIGHLIGHTS = [
 export default function Tour() {
   const { id = 'p1' } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getPropertyById, addAppointment, getAvailableSlotsForProperty } = useAppStore();
+  const {
+    getPropertyById,
+    addAppointment,
+    openSlots,
+    appointments,
+  } = useAppStore();
   const property = getPropertyById(id);
 
   const [selectedAgent, setSelectedAgent] = useState<Agent>(MOCK_AGENTS[0]);
@@ -38,8 +43,31 @@ export default function Tour() {
 
   const availableSlots = useMemo(() => {
     if (!property) return [];
-    return getAvailableSlotsForProperty(property.id);
-  }, [property, getAvailableSlotsForProperty]);
+    const propertyOpenSlots = openSlots.filter(
+      (s) => s.propertyId === property.id && s.isActive
+    );
+    const propertyAppointments = appointments.filter(
+      (a) => a.propertyId === property.id && a.status !== 'cancelled'
+    );
+    const grouped: Record<string, string[]> = {};
+    propertyOpenSlots.forEach((slot) => {
+      const booked = propertyAppointments.filter((a) => {
+        const ad = new Date(a.time);
+        const slotTime = slot.timeSlot.split('-')[0];
+        return (
+          ad.toISOString().split('T')[0] === slot.date &&
+          `${String(ad.getHours()).padStart(2, '0')}:00` === slotTime
+        );
+      }).length;
+      if (booked < slot.maxCapacity) {
+        if (!grouped[slot.date]) grouped[slot.date] = [];
+        grouped[slot.date].push(slot.timeSlot);
+      }
+    });
+    return Object.entries(grouped)
+      .map(([date, timeSlots]) => ({ date, timeSlots }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [property, openSlots, appointments]);
 
   const availableTimeSlots = useMemo(() => {
     if (!apptDate) return [];

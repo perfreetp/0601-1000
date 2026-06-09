@@ -60,6 +60,7 @@ export default function Admin() {
   const [newSlotDate, setNewSlotDate] = useState('');
   const [newSlotTime, setNewSlotTime] = useState(AVAILABLE_TIME_SLOTS[0]);
   const [newSlotCapacity, setNewSlotCapacity] = useState(3);
+  const [scheduleViewMode, setScheduleViewMode] = useState<'list' | 'week'>('week');
 
   const {
     properties,
@@ -180,6 +181,31 @@ export default function Admin() {
         `${String(ad.getHours()).padStart(2, '0')}:00` === slotTime
       );
     }).length;
+  };
+
+  const weekDaysData = useMemo(() => {
+    const days: { day: string; date: string; dateKey: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
+      days.push({
+        day: weekDays[i],
+        date: `${d.getMonth() + 1}/${d.getDate()}`,
+        dateKey: d.toISOString().split('T')[0],
+      });
+    }
+    return days;
+  }, []);
+
+  const handleToggleSlotSafe = (slot: OpenSlot) => {
+    const booked = getBookedCount(slot);
+    if (slot.isActive && booked > 0) {
+      if (!confirm(`该时段已有 ${booked} 个预约，停用后购房者将无法再预约，但已有预约会保留。确认停用吗？`)) {
+        return;
+      }
+    }
+    toggleSlotActive(slot.id);
   };
 
   return (
@@ -380,80 +406,205 @@ export default function Admin() {
                   <div className="text-sm text-metal-400">
                     共 <span className="text-aurora-400 font-semibold">{filteredOpenSlots.length}</span> 个开放时段
                   </div>
+                  <div className="flex items-center gap-1 bg-space-800/60 rounded-xl p-1">
+                    <button
+                      onClick={() => setScheduleViewMode('week')}
+                      className={`px-4 py-1.5 rounded-lg text-sm transition-all ${scheduleViewMode === 'week' ? 'bg-aurora-500 text-space-900 font-semibold' : 'text-metal-300 hover:text-white'}`}
+                    >
+                      排班周视图
+                    </button>
+                    <button
+                      onClick={() => setScheduleViewMode('list')}
+                      className={`px-4 py-1.5 rounded-lg text-sm transition-all ${scheduleViewMode === 'list' ? 'bg-aurora-500 text-space-900 font-semibold' : 'text-metal-300 hover:text-white'}`}
+                    >
+                      列表视图
+                    </button>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-metal-400 border-b border-metal-500/20">
-                        <th className="py-3 pr-4 font-medium">房源</th>
-                        <th className="py-3 pr-4 font-medium">日期</th>
-                        <th className="py-3 pr-4 font-medium">时间段</th>
-                        <th className="py-3 pr-4 font-medium">预约情况</th>
-                        <th className="py-3 pr-4 font-medium">状态</th>
-                        <th className="py-3 font-medium">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredOpenSlots.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-12 text-center text-metal-500">
-                            暂无开放时段，请先添加
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredOpenSlots.map((slot: OpenSlot) => {
-                          const booked = getBookedCount(slot);
-                          const isFull = booked >= slot.maxCapacity;
-                          return (
-                            <tr key={slot.id} className="border-b border-metal-500/10 hover:bg-aurora-500/5">
-                              <td className="py-4 pr-4">
-                                <div className="text-white font-medium truncate max-w-[280px]">{slot.propertyTitle}</div>
-                              </td>
-                              <td className="py-4 pr-4 text-metal-200">{slot.date}</td>
-                              <td className="py-4 pr-4">
-                                <span className="tag-chip">{slot.timeSlot}</span>
-                              </td>
-                              <td className="py-4 pr-4">
-                                <span className={isFull ? 'text-coral-400 font-medium' : 'text-metal-200'}>
-                                  {booked}/{slot.maxCapacity}
-                                  {isFull && ' (约满)'}
-                                </span>
-                              </td>
-                              <td className="py-4 pr-4">
-                                {slot.isActive ? (
-                                  <span className="tag-chip tag-chip-active">开放中</span>
+                {scheduleViewMode === 'week' ? (
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[1000px]">
+                      <div className="grid grid-cols-8 gap-3 mb-3">
+                        <div className="text-sm font-semibold text-metal-400 px-3 py-2">房源</div>
+                        {weekDaysData.map((d) => (
+                          <div key={d.dateKey} className="text-center">
+                            <div className="text-xs text-metal-500">{d.day}</div>
+                            <div className="text-base font-bold text-white">{d.date}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {(schedulePropertyId
+                        ? properties.filter((p) => p.id === schedulePropertyId)
+                        : properties
+                      ).map((property) => (
+                        <div key={property.id} className="grid grid-cols-8 gap-3 mb-3">
+                          <div className="glass-card rounded-xl p-3 flex items-start">
+                            <img
+                              src={property.coverImage}
+                              alt={property.title}
+                              className="w-10 h-8 rounded object-cover flex-shrink-0 mr-2"
+                            />
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold text-white truncate">{property.title}</div>
+                              <div className="text-[10px] text-metal-400 truncate">{property.layout} · {property.area}㎡</div>
+                            </div>
+                          </div>
+                          {weekDaysData.map((day) => {
+                            const daySlots = filteredOpenSlots.filter(
+                              (s) => s.propertyId === property.id && s.date === day.dateKey
+                            );
+                            return (
+                              <div key={`${property.id}-${day.dateKey}`} className="glass-card rounded-xl p-2 min-h-[100px]">
+                                {daySlots.length === 0 ? (
+                                  <div className="h-full flex items-center justify-center">
+                                    <span className="text-[10px] text-metal-600">无时段</span>
+                                  </div>
                                 ) : (
-                                  <span className="tag-chip" style={{ background: 'rgba(255,107,107,0.15)', color: '#FF6B6B', borderColor: 'rgba(255,107,107,0.3)' }}>已停用</span>
+                                  <div className="space-y-1.5">
+                                    {daySlots.map((slot) => {
+                                      const booked = getBookedCount(slot);
+                                      const remaining = slot.maxCapacity - booked;
+                                      const isFull = remaining <= 0;
+                                      return (
+                                        <div
+                                          key={slot.id}
+                                          className={`rounded-lg p-2 text-[11px] border transition-all ${
+                                            !slot.isActive
+                                              ? 'bg-metal-500/10 border-metal-500/20 opacity-60'
+                                              : isFull
+                                              ? 'bg-coral-500/10 border-coral-500/30'
+                                              : 'bg-space-800/60 border-aurora-500/20 hover:border-aurora-500/40'
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className={`font-mono font-medium ${slot.isActive ? 'text-aurora-400' : 'text-metal-500'}`}>
+                                              {slot.timeSlot}
+                                            </span>
+                                            <button
+                                              onClick={() => handleToggleSlotSafe(slot)}
+                                              className={`p-0.5 rounded transition-colors ${slot.isActive ? 'text-amber-400 hover:bg-amber-500/20' : 'text-aurora-400 hover:bg-aurora-500/20'}`}
+                                              title={slot.isActive ? '停用' : '启用'}
+                                            >
+                                              {slot.isActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                                            </button>
+                                          </div>
+                                          <div className="flex items-center justify-between">
+                                            <span className={isFull ? 'text-coral-400' : slot.isActive ? 'text-metal-200' : 'text-metal-500'}>
+                                              剩 <span className="font-bold">{remaining}</span>/{slot.maxCapacity}
+                                            </span>
+                                            {!slot.isActive && (
+                                              <span className="text-[9px] text-coral-400">停用</span>
+                                            )}
+                                            {isFull && slot.isActive && (
+                                              <span className="text-[9px] text-coral-400">约满</span>
+                                            )}
+                                          </div>
+                                          {booked > 0 && (
+                                            <div className="mt-1 pt-1 border-t border-metal-500/10">
+                                              <div className="h-1 rounded-full bg-space-900 overflow-hidden">
+                                                <div
+                                                  className={`h-full rounded-full ${isFull ? 'bg-coral-500' : 'bg-aurora-500'}`}
+                                                  style={{ width: `${(booked / slot.maxCapacity) * 100}%` }}
+                                                />
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 )}
-                              </td>
-                              <td className="py-4">
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => toggleSlotActive(slot.id)}
-                                    className={`p-2 rounded-lg transition-all ${slot.isActive ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25' : 'bg-aurora-500/15 text-aurora-400 hover:bg-aurora-500/25'}`}
-                                    title={slot.isActive ? '停用' : '启用'}
-                                  >
-                                    {slot.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      if (confirm('确定删除该时段吗？')) deleteOpenSlot(slot.id);
-                                    }}
-                                    className="p-2 rounded-lg bg-coral-500/15 text-coral-400 hover:bg-coral-500/25 transition-all"
-                                    title="删除"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-metal-400 border-b border-metal-500/20">
+                          <th className="py-3 pr-4 font-medium">房源</th>
+                          <th className="py-3 pr-4 font-medium">日期</th>
+                          <th className="py-3 pr-4 font-medium">时间段</th>
+                          <th className="py-3 pr-4 font-medium">预约情况</th>
+                          <th className="py-3 pr-4 font-medium">状态</th>
+                          <th className="py-3 font-medium">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredOpenSlots.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-12 text-center text-metal-500">
+                              暂无开放时段，请先添加
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredOpenSlots.map((slot: OpenSlot) => {
+                            const booked = getBookedCount(slot);
+                            const remaining = slot.maxCapacity - booked;
+                            const isFull = remaining <= 0;
+                            return (
+                              <tr key={slot.id} className="border-b border-metal-500/10 hover:bg-aurora-500/5">
+                                <td className="py-4 pr-4">
+                                  <div className="text-white font-medium truncate max-w-[280px]">{slot.propertyTitle}</div>
+                                </td>
+                                <td className="py-4 pr-4 text-metal-200">{slot.date}</td>
+                                <td className="py-4 pr-4">
+                                  <span className="tag-chip">{slot.timeSlot}</span>
+                                </td>
+                                <td className="py-4 pr-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className={isFull ? 'text-coral-400 font-medium' : 'text-metal-200'}>
+                                      剩余 <span className="font-bold">{remaining}</span> / {slot.maxCapacity}
+                                      {isFull && ' (约满)'}
+                                    </span>
+                                    <div className="h-1.5 w-24 rounded-full bg-space-800 overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${isFull ? 'bg-coral-500' : 'bg-aurora-500'}`}
+                                        style={{ width: `${(booked / slot.maxCapacity) * 100}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-4 pr-4">
+                                  {slot.isActive ? (
+                                    <span className="tag-chip tag-chip-active">开放中</span>
+                                  ) : (
+                                    <span className="tag-chip" style={{ background: 'rgba(255,107,107,0.15)', color: '#FF6B6B', borderColor: 'rgba(255,107,107,0.3)' }}>已停用</span>
+                                  )}
+                                </td>
+                                <td className="py-4">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleToggleSlotSafe(slot)}
+                                      className={`p-2 rounded-lg transition-all ${slot.isActive ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25' : 'bg-aurora-500/15 text-aurora-400 hover:bg-aurora-500/25'}`}
+                                      title={slot.isActive ? '停用' : '启用'}
+                                    >
+                                      {slot.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (confirm('确定删除该时段吗？')) deleteOpenSlot(slot.id);
+                                      }}
+                                      className="p-2 rounded-lg bg-coral-500/15 text-coral-400 hover:bg-coral-500/25 transition-all"
+                                      title="删除"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
                 <div className="mt-8 pt-6 border-t border-metal-500/20">
                   <h3 className="font-semibold text-white mb-4 flex items-center gap-2">

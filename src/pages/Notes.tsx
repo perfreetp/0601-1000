@@ -25,6 +25,7 @@ export default function Notes() {
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [filterPropertyId, setFilterPropertyId] = useState<string>('');
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,9 +37,15 @@ export default function Notes() {
   }, [notes]);
 
   const filteredNotes = useMemo(() => {
-    if (!filterTag) return notes;
-    return notes.filter((n) => n.tags.includes(filterTag));
-  }, [notes, filterTag]);
+    let result = notes;
+    if (filterTag) {
+      result = result.filter((n) => n.tags.includes(filterTag));
+    }
+    if (filterPropertyId) {
+      result = result.filter((n) => n.propertyId === filterPropertyId);
+    }
+    return result;
+  }, [notes, filterTag, filterPropertyId]);
 
   const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && tagInput.trim()) {
@@ -146,31 +153,53 @@ export default function Notes() {
           </button>
         </div>
 
-        {allTags.length > 0 && (
-          <div className="glass-card rounded-xl p-4 mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Tag className="w-4 h-4 text-aurora-400" />
-              <span className="text-metal-300 text-sm font-medium">标签筛选</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setFilterTag(null)}
-                className={`tag-chip cursor-pointer ${!filterTag ? 'tag-chip-active' : ''}`}
+        <div className="glass-card rounded-xl p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <HomeIcon className="w-4 h-4 text-aurora-400" />
+                <span className="text-metal-300 text-sm font-medium">房源筛选</span>
+              </div>
+              <select
+                value={filterPropertyId}
+                onChange={(e) => setFilterPropertyId(e.target.value)}
+                className="input-field w-full"
               >
-                全部
-              </button>
-              {allTags.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => setFilterTag(filterTag === tag ? null : tag)}
-                  className={`tag-chip cursor-pointer ${filterTag === tag ? 'tag-chip-active' : ''}`}
-                >
-                  {tag}
-                </button>
-              ))}
+                <option value="">全部房源</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
             </div>
+            {allTags.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Tag className="w-4 h-4 text-aurora-400" />
+                  <span className="text-metal-300 text-sm font-medium">标签筛选</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setFilterTag(null)}
+                    className={`tag-chip cursor-pointer ${!filterTag ? 'tag-chip-active' : ''}`}
+                  >
+                    全部
+                  </button>
+                  {allTags.map((tag) => (
+                    <button
+                      key={tag}
+                      onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+                      className={`tag-chip cursor-pointer ${filterTag === tag ? 'tag-chip-active' : ''}`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {filteredNotes.length === 0 ? (
           <div className="glass-card rounded-2xl p-16 text-center">
